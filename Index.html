@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الكاتب الصوتي - Professional STT Tool</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Inter', 'system-ui', sans-serif;
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .animate-pulse-slow {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="h-screen bg-white md:bg-slate-50 md:bg-gradient-to-br from-indigo-50 via-white to-blue-50 flex justify-center items-center text-slate-800">
+
+    <div class="w-full max-w-4xl h-full md:h-[95vh] bg-white md:border md:border-indigo-100 md:rounded-[2.5rem] md:shadow-2xl overflow-hidden flex flex-col">
+        
+        <!-- Header Section -->
+        <div class="bg-gradient-to-r from-blue-500 to-indigo-600 p-5 md:p-6 text-white shrink-0">
+            <div class="relative flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm border border-white/30">
+                        <i data-lucide="mic" class="w-5 h-5 md:w-6 md:h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg md:text-xl font-extrabold tracking-tight">الكاتب الصوتي</h1>
+                        <p class="text-blue-50 text-[9px] font-bold opacity-90 uppercase tracking-widest">
+                            Professional STT Tool
+                        </p>
+                    </div>
+                </div>
+                <div id="recordingStatus" class="hidden flex items-center gap-2 bg-red-500/20 px-3 py-1 rounded-full border border-red-500/30 animate-pulse">
+                    <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+                    <span class="text-[10px] font-bold">الميكروفون نشط</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden px-4 md:px-8 py-6">
+            <div class="flex-1 flex flex-col space-y-4 min-h-0">
+                <!-- Controls -->
+                <div class="flex justify-between items-center px-1 shrink-0">
+                    <div class="flex gap-2">
+                        <button id="clearBtn" class="p-2.5 bg-white hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all border border-slate-200 shadow-sm" title="مسح النص">
+                            <i data-lucide="trash-2" class="w-5 h-5"></i>
+                        </button>
+                        <button id="undoBtn" class="hidden p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition-all border border-indigo-200 shadow-sm" title="تراجع">
+                            <i data-lucide="undo-2" class="w-5 h-5"></i>
+                        </button>
+                        <button id="copyBtn" class="p-2.5 bg-white hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-200 shadow-sm" title="نسخ النص">
+                            <i data-lucide="copy" id="copyIcon" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    <button id="toggleMicBtn" class="px-5 py-2.5 rounded-xl shadow-lg transition-all duration-300 flex items-center gap-2 border-b-4 active:border-b-0 active:translate-y-1 bg-indigo-600 border-indigo-800 text-white hover:bg-indigo-500">
+                        <i data-lucide="mic" id="micBtnIcon" class="w-5 h-5"></i>
+                        <span id="micBtnText" class="text-xs font-black">تحدث الآن</span>
+                    </button>
+                </div>
+
+                <!-- Text Area -->
+                <div class="flex-1 flex flex-col min-h-0 border-t border-slate-100 pt-2">
+                    <textarea
+                        id="mainTextarea"
+                        class="w-full flex-1 p-2 text-base md:text-lg bg-transparent outline-none leading-relaxed text-slate-800 placeholder-slate-300 resize-none overflow-y-auto cursor-pointer"
+                        placeholder="ابدأ التحدث أو استخدم الأوامر (سطر جديد، حذف، نقطة)..."
+                    ></textarea>
+                </div>
+                
+                <!-- Footer Info -->
+                <div class="py-3 px-1 border-t border-slate-50 flex gap-4 text-[10px] text-slate-400 font-medium overflow-x-auto whitespace-nowrap scrollbar-hide">
+                    <span class="flex items-center gap-1"><div class="w-1.5 h-1.5 bg-blue-400 rounded-full"></div> سحب لليمين: حذف</span>
+                    <span class="flex items-center gap-1"><div class="w-1.5 h-1.5 bg-indigo-400 rounded-full"></div> سحب للأسفل: سطر جديد</span>
+                    <span class="flex items-center gap-1"><div class="w-1.5 h-1.5 bg-purple-400 rounded-full"></div> نقر مزدوج: قائمة تنقيط</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State Variables
+        let text = localStorage.getItem('vw_text') || "";
+        let lastClearedText = "";
+        let isRecording = false;
+        let recognition = null;
+        let wakeLock = null;
+
+        // Elements
+        const textarea = document.getElementById('mainTextarea');
+        const toggleMicBtn = document.getElementById('toggleMicBtn');
+        const micBtnIcon = document.getElementById('micBtnIcon');
+        const micBtnText = document.getElementById('micBtnText');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const clearBtn = document.getElementById('clearBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const copyIcon = document.getElementById('copyIcon');
+
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Sync UI with State
+        function updateUI() {
+            textarea.value = text;
+            localStorage.setItem('vw_text', text);
+            
+            if (lastClearedText) {
+                undoBtn.classList.remove('hidden');
+            } else {
+                undoBtn.classList.add('hidden');
+            }
+
+            if (isRecording) {
+                toggleMicBtn.classList.replace('bg-indigo-600', 'bg-red-500');
+                toggleMicBtn.classList.replace('border-indigo-800', 'border-red-700');
+                toggleMicBtn.classList.add('animate-pulse');
+                micBtnText.innerText = "إيقاف";
+                recordingStatus.classList.remove('hidden');
+                micBtnIcon.setAttribute('data-lucide', 'mic-off');
+            } else {
+                toggleMicBtn.classList.replace('bg-red-500', 'bg-indigo-600');
+                toggleMicBtn.classList.replace('border-red-700', 'border-indigo-800');
+                toggleMicBtn.classList.remove('animate-pulse');
+                micBtnText.innerText = "تحدث الآن";
+                recordingStatus.classList.add('hidden');
+                micBtnIcon.setAttribute('data-lucide', 'mic');
+            }
+            lucide.createIcons();
+        }
+
+        // Logic Functions
+        function deleteLastWord() {
+            const trimmed = text.trimEnd();
+            const lastSpace = trimmed.lastIndexOf(" ");
+            const lastNewline = trimmed.lastIndexOf("\n");
+            const lastIndex = Math.max(lastSpace, lastNewline);
+            
+            if (lastIndex === -1) {
+                text = "";
+            } else {
+                text = trimmed.substring(0, lastIndex).trimEnd();
+            }
+            updateUI();
+        }
+
+        // Touch Gestures
+        let touchStartPos = { x: 0, y: 0, time: 0 };
+        let lastTapTime = 0;
+
+        textarea.addEventListener('touchstart', (e) => {
+            const touch = e.targetTouches[0];
+            touchStartPos = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+        }, { passive: true });
+
+        textarea.addEventListener('touchend', (e) => {
+            const end = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+            const duration = Date.now() - touchStartPos.time;
+            const now = Date.now();
+            
+            const deltaX = end.x - touchStartPos.x;
+            const deltaY = end.y - touchStartPos.y;
+            const absX = Math.abs(deltaX);
+            const absY = Math.abs(deltaY);
+
+            const isTap = absX < 15 && absY < 15 && duration < 250;
+
+            if (isTap) {
+                const timeSinceLastTap = now - lastTapTime;
+                if (timeSinceLastTap < 300) {
+                    text = text.trimEnd() + "\n- ";
+                    lastTapTime = 0;
+                    updateUI();
+                    return;
+                }
+                lastTapTime = now;
+                return;
+            }
+
+            // New Line (Swipe down)
+            if (deltaY > 80 && absX < 60) {
+                text = text + "\n";
+                updateUI();
+                return;
+            }
+
+            // Delete (Swipe right)
+            if (deltaX > 80 && absY < 60) {
+                deleteLastWord();
+                return;
+            }
+        });
+
+        // Speech Recognition
+        function initRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return;
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = "ar-SA";
+
+            recognition.onresult = (event) => {
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        const chunk = event.results[i][0].transcript.trim();
+                        const cleanChunk = chunk.replace(/[.؟!]$/, "").trim();
+                        
+                        const normalizedCmd = cleanChunk
+                            .replace(/[أإآ]/g, 'ا')
+                            .replace(/ة/g, 'ه')
+                            .replace(/ى/g, 'ي')
+                            .replace(/ئ/g, 'ي')
+                            .replace(/ؤ/g, 'و');
+
+                        if (normalizedCmd === "احذف" || normalizedCmd === "حذف") {
+                            deleteLastWord();
+                        } else if (normalizedCmd === "فاصله") {
+                            text = text.trimEnd() + "، ";
+                        } else if (normalizedCmd === "استفهام") {
+                            text = text.trimEnd() + "؟ ";
+                        } else if (normalizedCmd === "سطر جديد" || normalizedCmd === "انزل سطر") {
+                            text = text + "\n";
+                        } else if (normalizedCmd === "نقطه") {
+                            text = text.trimEnd() + ".\n";
+                        } else if (normalizedCmd === "علامه صح" || normalizedCmd === "صح") {
+                            text = text.trimEnd() + " ✓ ";
+                        } else if (normalizedCmd === "علامه خطا" || normalizedCmd === "خطا") {
+                            text = text.trimEnd() + " ✗ ";
+                        } else {
+                            const lastChar = text.slice(-1);
+                            if (text === "" || lastChar === "\n") {
+                                text += chunk;
+                            } else {
+                                text += " " + chunk;
+                            }
+                        }
+                        updateUI();
+                    }
+                }
+            };
+
+            recognition.onend = () => {
+                if (isRecording) {
+                    try { recognition.start(); } catch (e) {}
+                }
+            };
+
+            recognition.onerror = () => {
+                isRecording = false;
+                updateUI();
+            };
+        }
+
+        // WakeLock
+        async function handleWakeLock(status) {
+            if ('wakeLock' in navigator) {
+                if (status) {
+                    try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+                } else if (wakeLock) {
+                    wakeLock.release().then(() => { wakeLock = null; });
+                }
+            }
+        }
+
+        // Actions
+        toggleMicBtn.onclick = () => {
+            if (isRecording) {
+                isRecording = false;
+                recognition.stop();
+                handleWakeLock(false);
+            } else {
+                if (!recognition) initRecognition();
+                isRecording = true;
+                try { recognition.start(); } catch (e) { isRecording = false; }
+                handleWakeLock(true);
+            }
+            updateUI();
+        };
+
+        clearBtn.onclick = () => {
+            if (text.trim() !== "") lastClearedText = text;
+            text = "";
+            updateUI();
+        };
+
+        undoBtn.onclick = () => {
+            if (lastClearedText) {
+                text = lastClearedText;
+                lastClearedText = "";
+                updateUI();
+            }
+        };
+
+        copyBtn.onclick = () => {
+            if (!text.trim()) return;
+            const tempTextarea = document.createElement("textarea");
+            tempTextarea.value = text;
+            document.body.appendChild(tempTextarea);
+            tempTextarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextarea);
+            
+            copyIcon.setAttribute('data-lucide', 'check');
+            copyIcon.classList.add('text-green-500');
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                copyIcon.setAttribute('data-lucide', 'copy');
+                copyIcon.classList.remove('text-green-500');
+                lucide.createIcons();
+            }, 2000);
+        };
+
+        textarea.oninput = (e) => {
+            text = e.target.value;
+            localStorage.setItem('vw_text', text);
+        };
+
+        // Initial Load
+        window.onload = () => {
+            updateUI();
+            initRecognition();
+        };
+    </script>
+</body>
+</html>
+
